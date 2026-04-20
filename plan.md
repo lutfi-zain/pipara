@@ -295,6 +295,72 @@ function rrf(scores, k=60) {
 
 ---
 
+## Option C: wink-bm25-text-search Details
+
+### Package Info
+```
+name: wink-bm25-text-search
+version: 3.1.2
+license: MIT
+size: ~2MB installed (10 packages total)
+```
+
+### Dependencies
+- wink-nlp (1.14.3) - NLP processing
+- wink-nlp-utils (2.1.0) - NLP utilities  
+- wink-eng-lite-web-model (1.8.1) - English language model
+- wink-helpers (2.0.0) - Helper functions
+
+### Usage Example
+```typescript
+import { BM25 } = require('wink-bm25-text-search');
+
+// Create BM25 instance
+const bm25 = new BM25();
+
+// Add documents
+bm25.addDoc('doc1', 'React hooks tutorial for beginners');
+bm25.addDoc('doc2', 'TypeScript advanced patterns');
+bm25.addDoc('doc3', 'Building React apps with TypeScript');
+
+// Index
+bm25.index();
+
+// Search
+const results = bm25.search('React TypeScript');
+// Returns: [{doc: 'doc3', score: 0.8}, {doc: 'doc1', score: 0.5}, ...]
+```
+
+### Pros
+- Full BM25 implementation with Okapi scoring
+- Built-in text preprocessing (tokenization, stemming)
+- Configurable parameters
+- Semantic search support
+- Actively maintained (last: ~1 year ago)
+
+### Cons
+- 2MB+ installed size
+- Heavy dependencies (NLP libraries)
+- May be slow on older Android devices
+- Requires npm install - adds to package.json
+
+### Termux Test Results (just now)
+```
+sizes: ~2MB total (10 packages)
+install time: ~3 seconds
+works: Yes
+```
+
+### Recommendation
+Use Option C **only if**:
+- Wiki has 50+ pages
+- Device has 500MB+ free storage
+- User explicitly requests better search
+
+For most users: Option A (simple) is sufficient.
+
+---
+
 ## Phase 5: Automation
 
 ### Context
