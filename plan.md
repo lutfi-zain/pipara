@@ -220,7 +220,7 @@ Scale beyond simple keyword search. Add BM25, vector search, and graph traversal
 
 ### Tasks
 - [x] Implement lightweight BM25 in pure JS (no extra deps for Termux)
-- [x] Add scale-based tier: simple search <50 pages, BM25 50-200
+- [x] Add scale-based tier: simple search <10 pages, BM25 >10 pages
 - [x] Implement RRF fusion algorithm
 - [x] Update wiki_query to use hybrid search
 - [x] Add search result scoring and ranking
