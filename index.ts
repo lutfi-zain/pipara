@@ -518,9 +518,166 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  // ---- SLASH COMMANDS ----
+  async function runDashboard(cwd) {
+    const counts = {};
+    for (const cat of CATEGORIES) counts[cat] = (await listItems(cwd, cat)).length;
+    let wikiPages = 0;
+    for (const cat of CATEGORIES) {
+      for (const item of await listItems(cwd, cat)) {
+        const wikiDir = join(await getItemDir(cwd, cat, item), WIKI_DIR);
+        if (existsSync(wikiDir)) wikiPages += (await readdir(wikiDir)).filter(f => f.endsWith(".md")).length;
+      }
+    }
+    const graph = await loadGraph(cwd);
+    const entities = Object.keys(graph.entities).length;
+    const memory = sessionMemory.filter(m => !m.superseded).length;
+    return {
+      content: [{ type: "text", text: `## PiPara Dashboard\n\n**PARA**: ${Object.values(counts).reduce((a, b) => a + b, 0)}\n**Wiki**: ${wikiPages}\n**Entities**: ${entities}\n**Memory**: ${memory}` }],
+      details: { counts, wikiPages, entities, memory }
+    };
+  }
+
+  async function runHealth(cwd) {
+    const fixes = [];
+    for (const cat of CATEGORIES) {
+      const items = await listItems(cwd, cat);
+      for (const item of items) {
+        const wikiDir = join(await getItemDir(cwd, cat, item), WIKI_DIR);
+        if (!existsSync(wikiDir)) { fixes.push("no wiki: " + cat + "/" + item); continue; }
+        for (const file of await readdir(wikiDir)) {
+          if (!file.endsWith(".md")) continue;
+          const content = await readFile(join(wikiDir, file), "utf8");
+          if (content.length < 100) fixes.push("small: " + file);
+        }
+      }
+    }
+    if (fixes.length === 0) {
+      return { content: [{ type: "text", text: "## PiPara Health\n\n✅ All systems healthy - no issues found" }], details: {} };
+    }
+    return { content: [{ type: "text", text: "## PiPara Health\n\n⚠️ Issues found:\n\n" + fixes.map(f => "- " + f).join("\n") }], details: {} };
+  }
+
+  async function runViz(cwd) {
+    const counts = {};
+    for (const cat of CATEGORIES) counts[cat] = (await listItems(cwd, cat)).length;
+    let wikiPages = 0;
+    for (const cat of CATEGORIES) {
+      for (const item of await listItems(cwd, cat)) {
+        const wikiDir = join(await getItemDir(cwd, cat, item), WIKI_DIR);
+        if (existsSync(wikiDir)) wikiPages += (await readdir(wikiDir)).filter(f => f.endsWith(".md")).length;
+      }
+    }
+    const graph = await loadGraph(cwd);
+    const entities = Object.values(graph.entities).sort((a, b) => b.mentions - a.mentions).slice(0, 20);
+    const activeMem = sessionMemory.filter(m => !m.superseded);
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>📊 PiPara Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); color: #eee; min-height: 100vh; padding: 30px; }
+    h1 { color: #4fc3f7; margin-bottom: 8px; font-size: 28px; }
+    h2 { color: #81d4fa; margin: 20px 0 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px; }
+    .card { background: rgba(255,255,255,0.05); backdrop-filter: blur(10px); border-radius: 16px; padding: 24px; border: 1px solid rgba(255,255,255,0.1); }
+    .stat { font-size: 42px; font-weight: 700; background: linear-gradient(135deg, #4fc3f7, #81d4fa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .stat-label { font-size: 12px; color: #888; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; }
+    .section { background: rgba(255,255,255,0.03); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,0.05); }
+    .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .cat-card { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 16px; text-align: center; }
+    .cat-name { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .cat-count { font-size: 28px; font-weight: 600; color: #fff; }
+    .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 11px; margin: 2px; }
+    .badge-working { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+    .badge-episodic { background: rgba(79,195,247,0.2); color: #4fc3f7; }
+    .badge-semantic { background: rgba(129,212,250,0.2); color: #81d4fa; }
+    .badge-procedural { background: rgba(200,230,201,0.2); color: #c8e6c9; }
+    .entity { display: inline-block; background: rgba(79,195,247,0.15); padding: 6px 14px; border-radius: 20px; margin: 4px; font-size: 12px; border: 1px solid rgba(79,195,247,0.3); }
+    .memory-item { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
+    .timestamp { font-size: 11px; color: #666; margin-top: 4px; }
+    .footer { text-align: center; margin-top: 30px; color: #555; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>📊 PiPara Dashboard</h1>
+  <p style="color: #888; margin-bottom: 20px;">Personal Knowledge Management System</p>
+  
+  <div class="grid">
+    <div class="card"><div class="stat">${total}</div><div class="stat-label">PARA Items</div></div>
+    <div class="card"><div class="stat">${wikiPages}</div><div class="stat-label">Wiki Pages</div></div>
+    <div class="card"><div class="stat">${entities.length}</div><div class="stat-label">Entities</div></div>
+    <div class="card"><div class="stat">${activeMem.length}</div><div class="stat-label">Memories</div></div>
+  </div>
+  
+  <div class="section">
+    <h2>PARA Categories</h2>
+    <div class="cat-grid">
+      <div class="cat-card"><div class="cat-name">Projects</div><div class="cat-count">${counts.projects || 0}</div></div>
+      <div class="cat-card"><div class="cat-name">Areas</div><div class="cat-count">${counts.areas || 0}</div></div>
+      <div class="cat-card"><div class="cat-name">Resources</div><div class="cat-count">${counts.resources || 0}</div></div>
+      <div class="cat-card"><div class="cat-name">Archives</div><div class="cat-count">${counts.archives || 0}</div></div>
+    </div>
+  </div>
+  
+  ${activeMem.length > 0 ? `
+  <div class="section">
+    <h2>Recent Memories</h2>
+    ${activeMem.slice(-5).reverse().map(m => `
+      <div class="memory-item">
+        <span class="badge badge-${m.tier}">${m.tier}</span>
+        ${m.content.slice(0, 80)}${m.content.length > 80 ? '...' : ''}
+        <div class="timestamp">${new Date(m.created).toLocaleString()}</div>
+      </div>
+    `).join('')}
+  </div>` : ''}
+  
+  ${entities.length > 0 ? `
+  <div class="section">
+    <h2>Top Entities</h2>
+    <div style="margin-top: 12px;">${entities.map(e => `<span class="entity">${e.name} <span style="color:#666">(${e.mentions})</span></span>`).join('')}</div>
+  </div>` : ''}
+  
+  <div class="footer">PiPara v1.0 | PARA + LLM Wiki Extension</div>
+</body>
+</html>`;
+    
+    const dashboardPath = join(cwd, ".pipara-dashboard.html");
+    await writeFile(dashboardPath, html, "utf8");
+    return { content: [{ type: "text", text: "## PiPara Visualization\n\n📊 Dashboard saved to: `.pipara-dashboard.html`\n\nOpen in your browser to view the interactive dashboard." }], details: { path: dashboardPath } };
+  }
+
   // ---- HOOK: input ----
   pi.on("input", async (event, ctx) => {
-    const text = event.text.toLowerCase();
+    const text = event.text.trim().toLowerCase();
+    
+    // Handle slash commands
+    if (text.startsWith("/pipara-")) {
+      const cmd = text.slice(1); // Remove leading /
+      
+      if (cmd === "pipara-dashboard" || cmd === "pipara-dash") {
+        const result = await runDashboard(ctx.cwd);
+        return { action: "replace", response: result };
+      }
+      
+      if (cmd === "pipara-health" || cmd === "pipara-h") {
+        const result = await runHealth(ctx.cwd);
+        return { action: "replace", response: result };
+      }
+      
+      if (cmd === "pipara-viz" || cmd === "pipara-visualize" || cmd === "pipara-v") {
+        const result = await runViz(ctx.cwd);
+        return { action: "replace", response: result };
+      }
+      
+      if (cmd === "pipara-help") {
+        return { action: "replace", response: { content: [{ type: "text", text: `## PiPara Commands\n\n**Available:**\n\n| Command | Description |\n|---------|-------------|\n| /pipara-dashboard | Show text stats |\n| /pipara-health | Check system health |\n| /pipara-viz | Generate HTML visualization |\n| /pipara-help | Show this help |\n\n**Aliases:**\n- /pipara-dash = /pipara-dashboard\n- /pipara-h = /pipara-health\n- /pipara-v = /pipara-viz` }], details: {} } };
+      }
+    }
     
     // Detect intent to create new project
     if (/i('m| am)?\s*(start|working|building|creating)/.test(text) || /new\s*(project|app|website)/.test(text)) {
