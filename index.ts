@@ -653,13 +653,16 @@ export default function (pi: ExtensionAPI) {
 
   // ---- HOOK: input ----
   pi.on("input", async (event, ctx) => {
-    const text = event.text.trim().toLowerCase();
+    const text = event.text.trim();
+    console.log("[PiPara] Input received:", text);
     
     // Handle slash commands
     if (text.startsWith("/pipara-")) {
-      const cmd = text.slice(1); // Remove leading /
+      console.log("[PiPara] Slash command detected!");
+      const cmd = text.slice(1).toLowerCase(); // Remove leading / and lowercase
       
       if (cmd === "pipara-dashboard" || cmd === "pipara-dash") {
+        console.log("[PiPara] Running dashboard...");
         const result = await runDashboard(ctx.cwd);
         return { action: "replace", response: result };
       }
@@ -680,12 +683,12 @@ export default function (pi: ExtensionAPI) {
     }
     
     // Detect intent to create new project
-    if (/i('m| am)?\s*(start|working|building|creating)/.test(text) || /new\s*(project|app|website)/.test(text)) {
+    if (/i('m| am)?\s*(start|working|building|creating)/.test(text.toLowerCase()) || /new\s*(project|app|website)/.test(text.toLowerCase())) {
       addMemory("Intent: " + event.text.slice(0, 80), "working", "intent");
     }
     
     // Detect query intent
-    if (/what\s*(do|don't)\s*i\s*(know|remember)/.test(text) || /search\s*(for|me)/.test(text)) {
+    if (/what\s*(do|don't)\s*i\s*(know|remember)/.test(text.toLowerCase()) || /search\s*(for|me)/.test(text.toLowerCase())) {
       addMemory("Query: " + event.text.slice(0, 80), "working", "query");
     }
     
