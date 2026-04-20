@@ -171,13 +171,13 @@ Extract entities and build typed relationships. Enable graph traversal queries l
   ```
 
 ### Tasks
-- [ ] Expand `extractEntities()` to detect all entity types
-- [ ] Add relationship extraction from content
-- [ ] Implement graph persistence (`.graph/entities.json`)
-- [ ] Create `graph_traverse` tool with depth/breadth limits
-- [ ] Add entity linking in wiki pages
-- [ ] Update `wiki_ingest` to add entity relationships
-- [ ] Add graph visualization (basic text output)
+- [x] Expand `extractEntities()` to detect all entity types
+- [x] Add relationship extraction from content
+- [x] Implement graph persistence (`.graph/entities.json`)
+- [x] Create `graph_traverse` tool with depth/breadth limits
+- [x] Add entity linking in wiki pages
+- [x] Update `wiki_ingest` to add entity relationships
+- [ ] ~~Add graph visualization~~ (Phase 6 dashboard)
 
 ### Pi.dev Context Needed
 - File I/O: JSON read/write operations
