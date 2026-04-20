@@ -657,8 +657,8 @@ export default function (pi: ExtensionAPI) {
     description: "Show PiPara dashboard stats",
     handler: async (args, ctx) => {
       const result = await runDashboard(ctx.cwd);
-      // Send as message for rich TUI rendering
-      await ctx.sendMessage(result.content[0].text);
+      // Send as follow-up message for rich TUI rendering
+      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
       await ctx.ui.notify("📊 Dashboard updated!", "info");
     },
   });
@@ -667,7 +667,7 @@ export default function (pi: ExtensionAPI) {
     description: "Check system health",
     handler: async (args, ctx) => {
       const result = await runHealth(ctx.cwd);
-      await ctx.sendMessage(result.content[0].text);
+      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
       await ctx.ui.notify(result.content[0].text, result.content[0].text.includes("✅") ? "success" : "warning");
     },
   });
@@ -676,7 +676,7 @@ export default function (pi: ExtensionAPI) {
     description: "Generate HTML visualization dashboard",
     handler: async (args, ctx) => {
       const result = await runViz(ctx.cwd);
-      await ctx.sendMessage(result.content[0].text);
+      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
       // Open the dashboard in browser
       const { exec } = await import("node:child_process");
       exec(`start "" "${result.details.path}"`);
@@ -697,7 +697,7 @@ export default function (pi: ExtensionAPI) {
 | \`/pipara-help\` | Show this help |
 
 > 💡 PiPara automatically tracks your work!`;
-      await ctx.sendMessage(helpText);
+      pi.sendUserMessage(helpText, { deliverAs: "followUp" });
     },
   });
 
