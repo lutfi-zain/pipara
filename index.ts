@@ -657,9 +657,7 @@ export default function (pi: ExtensionAPI) {
     description: "Show PiPara dashboard stats",
     handler: async (args, ctx) => {
       const result = await runDashboard(ctx.cwd);
-      // Send as follow-up message for rich TUI rendering
-      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
-      await ctx.ui.notify("📊 Dashboard updated!", "info");
+      await ctx.ui.notify(result.content[0].text, "info");
     },
   });
 
@@ -667,7 +665,6 @@ export default function (pi: ExtensionAPI) {
     description: "Check system health",
     handler: async (args, ctx) => {
       const result = await runHealth(ctx.cwd);
-      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
       await ctx.ui.notify(result.content[0].text, result.content[0].text.includes("✅") ? "success" : "warning");
     },
   });
@@ -676,28 +673,19 @@ export default function (pi: ExtensionAPI) {
     description: "Generate HTML visualization dashboard",
     handler: async (args, ctx) => {
       const result = await runViz(ctx.cwd);
-      pi.sendUserMessage(result.content[0].text, { deliverAs: "followUp" });
+      await ctx.ui.notify(result.content[0].text, "info");
       // Open the dashboard in browser
       const { exec } = await import("node:child_process");
       exec(`start "" "${result.details.path}"`);
-      await ctx.ui.notify("🌐 Dashboard opened in browser!", "info");
+      await ctx.ui.notify("Dashboard opened in browser!", "success");
     },
   });
 
   pi.registerCommand("pipara-help", {
     description: "Show available commands",
     handler: async (args, ctx) => {
-      const helpText = `## 🧠 PiPara Commands
-
-| Command | Description |
-|---------|-------------|
-| \`/pipara-dashboard\` | Show stats (PARA, Wiki, Graph, Memory) |
-| \`/pipara-health\` | Check system for issues |
-| \`/pipara-viz\` | Generate & open HTML dashboard |
-| \`/pipara-help\` | Show this help |
-
-> 💡 PiPara automatically tracks your work!`;
-      pi.sendUserMessage(helpText, { deliverAs: "followUp" });
+      const helpText = "## PiPara Commands\n\n| Command | Description |\n|---------|-------------|\n| /pipara-dashboard | Show stats |\n| /pipara-health | Check issues |\n| /pipara-viz | Open dashboard |\n| /pipara-help | Show help |";
+      await ctx.ui.notify(helpText, "info");
     },
   });
 
