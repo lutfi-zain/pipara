@@ -7,7 +7,7 @@
   "author": "lutfi-zain",
   "license": "Apache-2.0",
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^1.0.0",
+    "@mariozechner/pi-coding-agent": "^0.67.68",
     "@sinclair/typebox": "^0.32.0"
   },
   "pi": {
