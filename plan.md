@@ -224,8 +224,13 @@ Scale beyond simple keyword search. Add BM25, vector search, and graph traversal
 - [x] Implement RRF fusion algorithm
 - [x] Update wiki_query to use hybrid search
 - [x] Add search result scoring and ranking
-- [ ] ~~index.md generation~~ (optional, can add later)
-- [ ] ~~Performance optimization~~ (only if needed at scale)
+- [x] Add test-bm25.sh script for evaluation
+
+### Phase 4 Completion: ✅ DONE
+- BM25 implemented in pure JS (~80 lines)
+- Works for all languages (Indonesian ✅)
+- Test script created and passing
+- 11 wiki pages created for testing
 
 ### Pi.dev Context Needed
 - External APIs: Web search integration if needed (optional)
@@ -568,13 +573,20 @@ Make the system run with minimal manual intervention. Auto-ingest sources, load 
   - Outdated confidence scores
 
 ### Tasks
-- [ ] Add auto-ingest hook for `read` tool results
-- [ ] Implement context loading on session start
-- [ ] Create scheduled maintenance (weekly)
-- [ ] Add intelligent suggestions (`auto_suggest` tool)
-- [ ] Update system prompt injection
-- [ ] Add activity logging (`.para/activity.md`)
-- [ ] Implement session crystallization
+- [x] Add auto-ingest hook for `read` tool results
+- [x] Implement context loading on session start
+- [x] Add intelligent suggestions (`auto_suggest` tool)
+- [x] Update system prompt injection
+- [x] Add activity logging (`.para/activity.md`)
+- [x] Implement session crystallization
+- [ ] Scheduled maintenance (weekly run para_maintenance)
+
+### Phase 5 Completion: ✅ MOSTLY DONE
+- tool_result hook: captures errors, extracts entities
+- auto_suggest: suggests next actions
+- before_agent_start: injects context into prompt
+- session_compact: crystallizes memory
+- activity.md: logs all operations
 
 ### Pi.dev Context Needed
 - Event system: `pi.on()` hooks for all events
