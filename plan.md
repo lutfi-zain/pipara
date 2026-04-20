@@ -361,6 +361,53 @@ For most users: Option A (simple) is sufficient.
 
 ---
 
+## Bahasa Indonesia Support
+
+### Research Results
+
+**wink-bm25-text-search**: ❌ No Indonesian support
+- Built-in language model: English only (`wink-eng-lite-web-model`)
+- Uses English-specific stemming
+
+**clientside-search**: ❌ No Indonesian (only en, de, fr, es, ja)
+- Claims multilingual but limited to 5 languages
+
+### Options for Indonesian
+
+**Option 1: Simple Search (already works)**
+- Current keyword search works for ALL languages
+- No stemming = no language dependency
+- "memahami" will find "memahami" (exact match)
+- Good enough for most cases
+
+**Option 2: Custom Stemmer**
+- Add Indonesian stemmer manually
+- Remove suffixes: -kan, -i, -an, -nya
+- Not perfect but better than nothing
+
+**Option 3: No Stemming + Stopwords**
+- Use BM25 without language-specific stemming
+- Works for exact matches
+- Add Indonesian stopwords list manually
+
+### Recommendation for Indonesian Users
+
+**Keep using Option A (simple search)** because:
+1. Keyword search works perfectly for Indonesian
+2. No language model needed
+3. Fast on Android
+4. "belajar react" will find "belajar react"
+
+BM25 without stemming is still useful for ranking results by relevance, even without language-specific processing.
+
+### Implementation Plan
+1. Use basic BM25 (Option B - simple JS version)
+2. Skip language-specific stemming
+3. Works for ALL languages including Indonesian
+4. No extra npm packages needed
+
+---
+
 ## Phase 5: Automation
 
 ### Context
