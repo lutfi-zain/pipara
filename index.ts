@@ -332,9 +332,10 @@ export default function (pi: ExtensionAPI) {
       confidence: Type.Optional(Type.Number())
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      addMemory(params.content, params.tier || "episodic", params.sourceTool, params.confidence || 0.8);
+      const conf = params.confidence ? (params.confidence > 1 ? params.confidence / 100 : params.confidence) : 0.8;
+      addMemory(params.content, params.tier || "episodic", params.sourceTool, conf);
       await saveMemory(ctx.cwd, sessionMemory);
-      return { content: [{ type: "text", text: `Saved with confidence ${Math.round((params.confidence || 0.8) * 100)}%` }], details: { count: sessionMemory.length } };
+      return { content: [{ type: "text", text: `Saved with confidence ${Math.round(conf * 100)}%` }], details: { count: sessionMemory.length } };
     },
   });
 
