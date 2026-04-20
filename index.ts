@@ -494,13 +494,85 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
+  // ---- HOOK: tool_result ----
   pi.on("tool_result", async (event, ctx) => {
-    if (event.isError) addMemory("Error: " + event.toolName, "working", event.toolName);
+    // Capture errors to working memory
+    if (event.isError) {
+      addMemory("Error: " + event.toolName, "working", event.toolName);
+    }
+    
+    // Extract entities from read files
     if (event.toolName === "read" && !event.isError) {
       const text = Array.isArray(event.content) ? event.content.map(c => c.type === "text" ? c.text : "").join("") : String(event.content);
       const entities = extractEntities(text);
       for (const e of entities) await addEntity(ctx.cwd, e.name, e.type);
+      if (entities.length > 0) addMemory("Read: " + entities.length + " entities", "working", "read");
     }
+    
+    // Track significant bash actions
+    if (event.toolName === "bash" && !event.isError) {
+      const result = Array.isArray(event.content) ? event.content.map(c => c.type === "text" ? c.text : "").join("") : String(event.content);
+      if (result.includes("git commit") || result.includes("npm publish") || result.includes("docker build")) {
+        addMemory("Action: " + result.slice(0, 80), "procedural", "bash");
+      }
+    }
+  });
+
+  // ---- HOOK: input ----
+  pi.on("input", async (event, ctx) => {
+    const text = event.text.toLowerCase();
+    
+    // Detect intent to create new project
+    if (/i('m| am)?\s*(start|working|building|creating)/.test(text) || /new\s*(project|app|website)/.test(text)) {
+      addMemory("Intent: " + event.text.slice(0, 80), "working", "intent");
+    }
+    
+    // Detect query intent
+    if (/what\s*(do|don't)\s*i\s*(know|remember)/.test(text) || /search\s*(for|me)/.test(text)) {
+      addMemory("Query: " + event.text.slice(0, 80), "working", "query");
+    }
+    
+    return { action: "continue" };
+  });
+
+  // ---- HOOK: agent_end ----
+  pi.on("agent_end", async (event, ctx) => {
+    // Summarize what was accomplished
+    const turnCount = ctx.sessionManager.getEntries().filter(e => e.type === "message" && e.message.role === "assistant").length;
+    if (turnCount > 0) {
+      addMemory("Session turn: " + turnCount + " LLM responses", "episodic", "session");
+    }
+  });
+
+  // ---- HOOK: session_compact ----
+  pi.on("session_compact", async (event, ctx) => {
+    // Crystallize session into memory
+    const entries = ctx.sessionManager.getEntries();
+    const assistantMsgs = entries.filter(e => e.type === "message" && e.message.role === "assistant");
+    
+    addMemory("Session compacted at " + new Date().toISOString() + " | " + assistantMsgs.length + " turns", "episodic", "compact");
+    
+    // Log to activity
+    const logPath = join(ctx.cwd, PARA_DIR, "activity.md");
+    const logEntry = `- ${new Date().toISOString()}: Session compacted (${assistantMsgs.length} turns)`;
+    await writeFile(logPath, logEntry, { flag: "a" }).catch(() => {});
+  });
+
+  // ---- HOOK: message_end ----
+  pi.on("message_end", async (event, ctx) => {
+    if (event.message.role === "user") {
+      const text = Array.isArray(event.message.content) 
+        ? event.message.content.map(c => c.type === "text" ? c.text : "").join("") 
+        : String(event.message.content);
+      if (text.length > 10) {
+        addMemory("User: " + text.slice(0, 100), "working", "user");
+      }
+    }
+  });
+
+  // ---- HOOK: session_shutdown ----
+  pi.on("session_shutdown", async (event, ctx) => {
+    addMemory("Session ended at " + new Date().toISOString(), "episodic", "shutdown");
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
