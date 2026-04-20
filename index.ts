@@ -19,6 +19,87 @@ const MEMORY_FILE = ".para/memory.json";
 const MEMORY_DECAY_HALF_LIFE = 90 * 24 * 60 * 60 * 1000; // 90 days in ms
 const MIN_CONFIDENCE = 0.1;
 
+// ---- PHASE 4: BM25 SEARCH ----
+const BM25_K1 = 1.5;
+const BM25_B = 0.75;
+const SEARCH_INDEX_FILE = ".para/search-index.json";
+const BM25_THRESHOLD = 10; // Use BM25 when >10 wiki pages
+
+// Tokenize text (simple, works for all languages)
+function tokenize(text: string): string[] {
+  return text.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 1);
+}
+
+// Calculate IDF scores
+function calcIDF(docCount: number, termDocCounts: Record<string, number>): Record<string, number> {
+  const idf: Record<string, number> = {};
+  for (const [term, count] of Object.entries(termDocCounts)) {
+    idf[term] = Math.log((docCount - count + 0.5) / (count + 0.5) + 1);
+  }
+  return idf;
+}
+
+// Score a document against query
+function scoreDoc(tokens: string[], queryTokens: string[], idf: Record<string, number>, avgLen: number): number {
+  const docLen = tokens.length;
+  const tf: Record<string, number> = {};
+  tokens.forEach(t => tf[t] = (tf[t] || 0) + 1);
+  
+  let score = 0;
+  for (const q of queryTokens) {
+    if (!idf[q]) continue;
+    const termFreq = tf[q] || 0;
+    const numerator = termFreq * (BM25_K1 + 1);
+    const denominator = termFreq + BM25_K1 * (1 - BM25_B + BM25_B * docLen / avgLen);
+    score += idf[q] * numerator / denominator;
+  }
+  return score;
+}
+
+// BM25 search
+interface SearchDoc { id: string; content: string; }
+async function bm25Search(cwd: string, documents: SearchDoc[], query: string): Promise<{id: string; score: number}[]> {
+  if (documents.length === 0) return [];
+  
+  const tokens = documents.map(d => tokenize(d.content));
+  const avgLen = tokens.reduce((a, t) => a + t.length, 0) / tokens.length || 1;
+  
+  // Count docs per term
+  const termDocCounts: Record<string, number> = {};
+  const allTerms = new Set<string>();
+  tokens.forEach(t => t.forEach(term => allTerms.add(term)));
+  allTerms.forEach(term => {
+    termDocCounts[term] = tokens.filter(t => t.includes(term)).length;
+  });
+  
+  const idf = calcIDF(documents.length, termDocCounts);
+  const queryTokens = tokenize(query);
+  
+  const results = documents.map((doc, i) => ({
+    id: doc.id,
+    score: scoreDoc(tokens[i], queryTokens, idf, avgLen)
+  }));
+  
+  return results.sort((a, b) => b.score - a.score);
+}
+
+// RRF fusion
+function rrfFusion(results: {id: string; score: number}[][], k = 60): {id: string; score: number}[] {
+  const combined = new Map<string, number>();
+  results.forEach(methodResults => {
+    methodResults.forEach((r, rank) => {
+      const score = 1 / (k + rank + 1);
+      combined.set(r.id, (combined.get(r.id) || 0) + score);
+    });
+  });
+  return Array.from(combined.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, score]) => ({ id, score }));
+}
+
 let sessionMemory: any[] = [];
 let initialized = false;
 
@@ -257,6 +338,8 @@ async function wikiIngest(cwd, category, itemName, sourcePath, content) {
 
 async function wikiSearchAll(cwd, query) {
   const results = [];
+  let pageCount = 0;
+  
   for (const cat of CATEGORIES) {
     const items = await listItems(cwd, cat);
     for (const item of items) {
@@ -264,13 +347,32 @@ async function wikiSearchAll(cwd, query) {
       if (!existsSync(wikiDir)) continue;
       for (const file of await readdir(wikiDir)) {
         if (!file.endsWith(".md")) continue;
+        pageCount++;
         const content = await readFile(join(wikiDir, file), "utf8");
+        const path = join(wikiDir, file);
+        // Simple keyword match (always)
         if (content.toLowerCase().includes(query.toLowerCase())) {
-          results.push({ category: cat, item, content, score: 0.5 });
+          results.push({ category: cat, item, content, path, score: 0.5 });
         }
       }
     }
   }
+  
+  // If enough pages, also use BM25
+  if (pageCount > BM25_THRESHOLD && results.length > 0) {
+    try {
+      const docs = results.map(r => ({ id: r.path, content: r.content }));
+      const bm25Results = await bm25Search(cwd, docs, query);
+      const bm25Map = new Map(bm25Results.map(r => [r.id, r.score]));
+      results.forEach(r => {
+        const bm25Score = bm25Map.get(r.path) || 0;
+        r.score = 0.5 + bm25Score; // Combine keyword + BM25
+      });
+    } catch (e) {
+      // BM25 failed, keep keyword results
+    }
+  }
+  
   return results.sort((a, b) => b.score - a.score);
 }
 
