@@ -110,13 +110,13 @@ Add confidence scoring, decay, and memory tiers. Information becomes stale over 
 - **Decay Formula**: `confidence *= Math.exp(-daysSinceUpdate / 90)`
 
 ### Tasks
-- [ ] Add confidence field to all memory structures
-- [ ] Implement decay calculation and application
-- [ ] Create `memory_consolidate` tool with tier analysis
-- [ ] Add memory persistence (JSON file)
-- [ ] Implement supersession logic
-- [ ] Add confidence display in memory recall
-- [ ] Update wiki pages with confidence metadata
+- [x] Add confidence field to all memory structures
+- [x] Implement decay calculation and application
+- [x] Create `memory_consolidate` tool with tier analysis
+- [x] Add memory persistence (JSON file)
+- [x] Implement supersession logic
+- [x] Add confidence display in memory recall
+- [ ] ~~Update wiki pages with confidence metadata~~ (optional, Phase 6)
 
 ### Pi.dev Context Needed
 - File I/O: Node.js `fs/promises` for persistence
