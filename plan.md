@@ -219,13 +219,13 @@ Scale beyond simple keyword search. Add BM25, vector search, and graph traversal
 - **RRF Formula**: `score = Σ(1/(k + rank_i))` where k=60
 
 ### Tasks
-- [ ] Implement lightweight BM25 in pure JS (no extra deps for Termux)
-- [ ] Add scale-based tier: simple search <50 pages, BM25 50-200
-- [ ] Create `index.md` generation and maintenance
-- [ ] Implement RRF fusion algorithm
-- [ ] Update `wiki_query` to use hybrid search
-- [ ] Add search result scoring and ranking
-- [ ] Performance optimization for large wikis
+- [x] Implement lightweight BM25 in pure JS (no extra deps for Termux)
+- [x] Add scale-based tier: simple search <50 pages, BM25 50-200
+- [x] Implement RRF fusion algorithm
+- [x] Update wiki_query to use hybrid search
+- [x] Add search result scoring and ranking
+- [ ] ~~index.md generation~~ (optional, can add later)
+- [ ] ~~Performance optimization~~ (only if needed at scale)
 
 ### Pi.dev Context Needed
 - External APIs: Web search integration if needed (optional)
