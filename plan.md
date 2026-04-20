@@ -382,3 +382,88 @@ Self-healing wiki that maintains itself. Detect issues, propose fixes, and ensur
 
 *Last Updated: 2026-04-20*
 *PiPara Development Plan v1.0*
+
+---
+
+## Evaluation & Testing Procedures
+
+### How to Test PiPara Extension
+
+#### 1. Push Changes to GitHub
+```bash
+cd ~/.pi/agent/git/github.com/lutfi-zain/pipara
+git add -A
+git commit -m "Description"
+git push origin master
+```
+
+#### 2. Update Extension in pi
+```bash
+pi update
+```
+
+#### 3. Test Basic Workflows
+
+**Test PARA Creation:**
+```bashnecho "Create project test-project about learning TypeScript" | pi -p
+```
+Expected: Project created in `.para/projects/test-project/`
+
+**Test Memory Save:**
+echo "Save memory: Testing memory with 90% confidence" | pi -p
+```
+Expected: Memory saved to `.para/memory.json`
+
+**Test Memory Recall:**
+echo "Recall memory testing" | pi -p
+```
+Expected: Returns memories sorted by confidence
+
+**Test Memory Consolidate:**
+echo "Run memory consolidate" | pi -p
+```
+Expected: Shows tier breakdown, avg confidence, applies decay
+
+**Test Dashboard:**
+echo "Show dashboard" | pi -p
+```
+Expected: Shows PARA, wiki, graph, memory counts
+
+**Test Wiki Ingest:**
+echo "Ingest source into test-project" | pi -p
+```
+Expected: Creates wiki page in `.para/projects/test-project/wiki/`
+
+#### 4. Verify Persistence
+- Check `.para/memory.json` exists after saving
+- Run new pi session and verify memories are loaded
+- Check decay application over time
+
+#### 5. Evaluation Criteria
+
+| Feature | What to Check | Success Metric |
+|--------|---------------|----------------|
+| PARA Create | Creates folder in .para/projects/ | Folder exists with README.md |
+| Memory Save | Saves to .para/memory.json | File exists, has valid JSON |
+| Memory Recall | Returns matching memories | Memories displayed with confidence |
+| Memory Persistence | Loads on new session | Memories persist across sessions |
+| Confidence | Displays in recall | Shows %, decays over time |
+| Wiki Ingest | Creates .md in wiki folder | File exists with entities |
+| Graph | Tracks entities | entities.json has entries |
+
+---
+
+## Phase 2 Completion Checklist
+
+- [x] Memory persistence to disk (`.para/memory.json`)
+- [x] Memory loads on session start
+- [x] Confidence tracking (0-1 scale)
+- [x] Confidence save and display
+- [x] Decay mechanism (90-day half-life)
+- [x] Memory consolidate applies decay
+- [x] Supersession logic
+- [x] Updated memory_save tool with confidence
+- [x] Updated memory_recall with sorting
+- [x] Session shutdown saves memory
+- [ ] ~~Wiki auto-summarization (not implemented)~~
+- [ ] ~~Confidence auto-decidng on read (not implemented)~~
