@@ -110,13 +110,74 @@ function applyDecay(memory) {
   return memory;
 }
 
+// ---- PHASE 3: EXPANDED ENTITY TYPES ----
+const ENTITY_TYPES = ["person", "project", "concept", "tool", "decision", "file"];
+const RELATION_TYPES = ["uses", "depends_on", "contradicts", "caused", "mentioned_in", "relates_to"];
+
 function extractEntities(content) {
   const entities = [];
-  for (const m of content.matchAll(/function\s+(\w+)/g)) entities.push({ name: m[1], type: "tool" });
-  for (const m of content.matchAll(/class\s+(\w+)/g)) entities.push({ name: m[1], type: "concept" });
-  for (const m of content.matchAll(/import\s+.*from\s+['"]([^'"]+)['"]/g)) entities.push({ name: m[1], type: "tool" });
-  for (const m of content.matchAll(/([\w./]+\.(ts|js|md|json))/g)) entities.push({ name: m[1], type: "file" });
+  const lines = content.split('\n');
+  
+  // Tool: function declarations
+  for (const m of content.matchAll(/function\s+(\w+)/g)) {
+    if (!entities.find(e => e.name === m[1])) entities.push({ name: m[1], type: "tool" });
+  }
+  // Tool: arrow functions
+  for (const m of content.matchAll(/(\w+)\s*=\s*\(.*\)\s*=>/g)) {
+    if (!entities.find(e => e.name === m[1])) entities.push({ name: m[1], type: "tool" });
+  }
+  // Concept: class declarations
+  for (const m of content.matchAll(/class\s+(\w+)/g)) {
+    if (!entities.find(e => e.name === m[1])) entities.push({ name: m[1], type: "concept" });
+  }
+  // Tool: import statements
+  for (const m of content.matchAll(/import\s+.*from\s+['"]([^'"]+)['"]/g)) {
+    const name = m[1].split('/').pop().replace(/[^\w]/g, '');
+    if (name && !entities.find(e => e.name === name)) entities.push({ name, type: "tool" });
+  }
+  // File: code file references
+  for (const m of content.matchAll(/([\w./]+\.(ts|js|tsx|jsx|md|json))/g)) {
+    if (!entities.find(e => e.name === m[1])) entities.push({ name: m[1], type: "file" });
+  }
+  // Person: @mentions or capitalized names
+  for (const m of content.matchAll(/@(\w+)/g)) {
+    if (!entities.find(e => e.name === m[1])) entities.push({ name: m[1], type: "person" });
+  }
+  // Project: capitalized phrases in quotes (e.g., "Learning React")
+  for (const m of content.matchAll(/\"([A-Z][\w\s]+)\\b/g)) {
+    const name = m[1].trim().replace(/\s+/g, '-');
+    if (name.length > 2 && !entities.find(e => e.name === name)) entities.push({ name, type: "project" });
+  }
+  // Decision: action verbs in past tense
+  for (const m of content.matchAll(/(created|added|updated|deleted|implemented|fixed)\s+([A-Z]\w+)/gi)) {
+    if (!entities.find(e => e.name === m[2])) entities.push({ name: m[2], type: "decision" });
+  }
   return entities;
+}
+
+function extractRelations(content, sourceEntity) {
+  const relations = [];
+  // uses: "uses X", "using X"
+  for (const m of content.matchAll(/uses?\s+([A-Z]\w+)/gi)) {
+    relations.push({ entity: m[1], relation: "uses" });
+  }
+  // depends_on: "depends on X", "requires X"
+  for (const m of content.matchAll(/(?:depends\s+on|requires)\s+([A-Z]\w+)/gi)) {
+    relations.push({ entity: m[1], relation: "depends_on" });
+  }
+  // contradicts: "opposes X", "vs X", "versus X"
+  for (const m of content.matchAll(/(?:contradicts|opposes|vs\.?|versus)\s+([A-Z]\w+)/gi)) {
+    relations.push({ entity: m[1], relation: "contradicts" });
+  }
+  // caused: "led to X", "caused X"
+  for (const m of content.matchAll(/(?:led\s+to|caused)\s+([A-Z]\w+)/gi)) {
+    relations.push({ entity: m[1], relation: "caused" });
+  }
+  // Add default mentioned_in relation
+  if (sourceEntity) {
+    relations.push({ entity: sourceEntity, relation: "mentioned_in" });
+  }
+  return relations;
 }
 
 async function searchGraph(cwd, query) {
@@ -176,10 +237,20 @@ async function wikiIngest(cwd, category, itemName, sourcePath, content) {
   const pageName = sourcePath.split("/").pop().replace(/\.[^.]+$/, "") || "source";
   const wikiPath = join(itemDir, WIKI_DIR, `${pageName}.md`);
   
+  // Extract entities
   const entities = extractEntities(content);
   for (const e of entities) await addEntity(cwd, e.name, e.type, itemName, "mentioned_in");
   
-  const wiki = `# ${pageName}\n\n## Source\n${sourcePath}\n\n${content.slice(0, 500)}...\n\n## Entities\n${entities.map(e => `- ${e.name} (${e.type})`).join("\n")}`;
+  // Extract relationships (Phase 3)
+  const relations = extractRelations(content, itemName);
+  for (const r of relations) {
+    // First add the related entity if it doesn't exist
+    await addEntity(cwd, r.entity, "concept", itemName, r.relation);
+    // Then link from the source
+    await addEntity(cwd, itemName, "project", r.entity, r.relation);
+  }
+  
+  const wiki = `# ${pageName}\n\n## Source\n${sourcePath}\n\n## Relationships\n${relations.length > 0 ? relations.map(r => `- ${r.entity} (${r.relation})`).join('\n') : 'None detected'}\n\n## Entities\n${entities.map(e => `- ${e.name} (${e.type})`).join('\n')}`;
   await writeFile(wikiPath, wiki);
   return wikiPath;
 }
@@ -301,24 +372,38 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "graph_search",
     label: "Graph Search",
-    description: "Search knowledge graph",
-    parameters: Type.Object({ query: Type.String() }),
+    description: "Search knowledge graph by name or type",
+    parameters: Type.Object({ 
+      query: Type.String(),
+      type: Type.Optional(Type.Union([Type.Literal("person"), Type.Literal("project"), Type.Literal("concept"), Type.Literal("tool"), Type.Literal("decision"), Type.Literal("file")]))
+    }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const entities = await searchGraph(ctx.cwd, params.query);
-      if (entities.length === 0) return { content: [{ type: "text", text: "No entities: " + params.query }], details: {} };
-      return { content: [{ type: "text", text: "## Entities\n\n" + entities.map(e => "- " + e.name + " (" + e.type + ") " + e.mentions + " mentions").join("\n") }], details: {} };
+      const graph = await loadGraph(ctx.cwd);
+      let entities = Object.values(graph.entities);
+      if (params.query) {
+        entities = entities.filter(e => e.name.toLowerCase().includes(params.query.toLowerCase()));
+      }
+      if (params.type) {
+        entities = entities.filter(e => e.type === params.type);
+      }
+      entities.sort((a, b) => b.mentions - a.mentions);
+      if (entities.length === 0) return { content: [{ type: "text", text: "No entities found" }], details: {} };
+      return { content: [{ type: "text", text: `## ${params.type || 'Entities'}\n\n` + entities.slice(0,15).map(e => `- ${e.name} (${e.type}) ${e.mentions}x`).join("\n") }], details: { count: entities.length } };
     },
   });
 
   pi.registerTool({
     name: "graph_traverse",
     label: "Graph Traverse",
-    description: "Navigate relationships",
-    parameters: Type.Object({ startEntity: Type.String() }),
+    description: "Navigate relationships from entity",
+    parameters: Type.Object({ 
+      startEntity: Type.String(),
+      relation: Type.Optional(Type.Union([Type.Literal("uses"), Type.Literal("depends_on"), Type.Literal("contradicts"), Type.Literal("caused"), Type.Literal("mentioned_in")]))
+    }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const results = await traverseGraph(ctx.cwd, params.startEntity);
+      const results = await traverseGraph(ctx.cwd, params.startEntity, params.relation);
       if (results.length === 0) return { content: [{ type: "text", text: "No path: " + params.startEntity }], details: {} };
-      return { content: [{ type: "text", text: "Path: " + results.map(e => e.name).join(" -> ") }], details: {} };
+      return { content: [{ type: "text", text: "Path: " + results.map(e => e.name).join(" -> ") }], details: { path: results.map(e => e.name) } };
     },
   });
 
