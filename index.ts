@@ -657,7 +657,9 @@ export default function (pi: ExtensionAPI) {
     description: "Show PiPara dashboard stats",
     handler: async (args, ctx) => {
       const result = await runDashboard(ctx.cwd);
-      await ctx.ui.notify(result.content[0].text, "info");
+      // Send as message for rich TUI rendering
+      await ctx.sendMessage(result.content[0].text);
+      await ctx.ui.notify("📊 Dashboard updated!", "info");
     },
   });
 
@@ -665,7 +667,8 @@ export default function (pi: ExtensionAPI) {
     description: "Check system health",
     handler: async (args, ctx) => {
       const result = await runHealth(ctx.cwd);
-      await ctx.ui.notify(result.content[0].text, "info");
+      await ctx.sendMessage(result.content[0].text);
+      await ctx.ui.notify(result.content[0].text, result.content[0].text.includes("✅") ? "success" : "warning");
     },
   });
 
@@ -673,15 +676,28 @@ export default function (pi: ExtensionAPI) {
     description: "Generate HTML visualization dashboard",
     handler: async (args, ctx) => {
       const result = await runViz(ctx.cwd);
-      await ctx.ui.notify(result.content[0].text, "info");
+      await ctx.sendMessage(result.content[0].text);
+      // Open the dashboard in browser
+      const { exec } = await import("node:child_process");
+      exec(`start "" "${result.details.path}"`);
+      await ctx.ui.notify("🌐 Dashboard opened in browser!", "info");
     },
   });
 
   pi.registerCommand("pipara-help", {
     description: "Show available commands",
     handler: async (args, ctx) => {
-      const helpText = `## PiPara Commands\n\n| Command | Description |\n|---------|-------------|\n| /pipara-dashboard | Show text stats |\n| /pipara-health | Check system health |\n| /pipara-viz | Generate HTML visualization |\n| /pipara-help | Show this help |`;
-      await ctx.ui.notify(helpText, "info");
+      const helpText = `## 🧠 PiPara Commands
+
+| Command | Description |
+|---------|-------------|
+| \`/pipara-dashboard\` | Show stats (PARA, Wiki, Graph, Memory) |
+| \`/pipara-health\` | Check system for issues |
+| \`/pipara-viz\` | Generate & open HTML dashboard |
+| \`/pipara-help\` | Show this help |
+
+> 💡 PiPara automatically tracks your work!`;
+      await ctx.sendMessage(helpText);
     },
   });
 
