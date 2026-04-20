@@ -15,8 +15,11 @@ const SOURCES_DIR = "sources";
 const GRAPH_DIR = ".graph";
 const CATEGORIES = ["projects", "areas", "resources", "archives"];
 const MEMORY_TIERS = ["working", "episodic", "semantic", "procedural"];
+const MEMORY_FILE = ".para/memory.json";
+const MEMORY_DECAY_HALF_LIFE = 90 * 24 * 60 * 60 * 1000; // 90 days in ms
+const MIN_CONFIDENCE = 0.1;
 
-let sessionMemory = [];
+let sessionMemory: any[] = [];
 let initialized = false;
 
 async function ensureDir(path) {
@@ -78,6 +81,35 @@ async function addEntity(cwd, name, type, relatedEntity, relation) {
   await saveGraph(cwd, graph);
 }
 
+// ---- PHASE 2: MEMORY PERSISTENCE ----
+async function loadMemory(cwd) {
+  const path = join(cwd, MEMORY_FILE);
+  if (!existsSync(path)) return [];
+  try {
+    const data = await readFile(path, "utf8");
+    return JSON.parse(data);
+  } catch {
+    return [];
+  }
+}
+
+async function saveMemory(cwd, memory) {
+  const path = join(cwd, MEMORY_FILE);
+  await ensureDir(cwd);
+  await writeFile(path, JSON.stringify(memory, null, 2));
+}
+
+function applyDecay(memory) {
+  const now = Date.now();
+  for (const m of memory) {
+    if (m.superseded) continue;
+    const daysActive = (now - m.updated) / MEMORY_DECAY_HALF_LIFE;
+    const decayFactor = Math.exp(-daysActive * Math.LN2);
+    m.confidence = Math.max(MIN_CONFIDENCE, m.originalConfidence * decayFactor);
+  }
+  return memory;
+}
+
 function extractEntities(content) {
   const entities = [];
   for (const m of content.matchAll(/function\s+(\w+)/g)) entities.push({ name: m[1], type: "tool" });
@@ -119,11 +151,23 @@ async function traverseGraph(cwd, start, relation, depth = 1) {
   return results;
 }
 
-function addMemory(content, tier = "episodic", sourceTool) {
+function addMemory(content, tier = "episodic", sourceTool, confidence = 0.8) {
   const id = createHash("sha256").update(content).digest("hex").slice(0, 12);
   const existing = sessionMemory.find(m => m.content.slice(0, 100) === content.slice(0, 100));
-  if (existing) existing.superseded = true;
-  sessionMemory.push({ id, content, tier, confidence: 0.8, created: Date.now(), updated: Date.now(), sourceTool, superseded: false });
+  if (existing) {
+    existing.superseded = true;
+  }
+  sessionMemory.push({ 
+    id, 
+    content, 
+    tier, 
+    confidence, 
+    originalConfidence: confidence,
+    created: Date.now(), 
+    updated: Date.now(), 
+    sourceTool, 
+    superseded: false 
+  });
 }
 
 async function wikiIngest(cwd, category, itemName, sourcePath, content) {
@@ -166,7 +210,11 @@ export default function (pi: ExtensionAPI) {
     initialized = true;
     for (const cat of CATEGORIES) await ensureDir(join(ctx.cwd, PARA_DIR, cat));
     await ensureDir(join(ctx.cwd, GRAPH_DIR));
-    ctx.ui.notify("PiPara ready", "info");
+    // Load persistent memory
+    sessionMemory = await loadMemory(ctx.cwd);
+    // Apply decay to existing memories
+    sessionMemory = applyDecay(sessionMemory);
+    ctx.ui.notify(`PiPara ready - ${sessionMemory.length} memories loaded`, "info");
   });
 
   pi.registerTool({
@@ -277,14 +325,16 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "memory_save",
     label: "Memory Save",
-    description: "Save to memory",
+    description: "Save to memory with confidence",
     parameters: Type.Object({ 
       content: Type.String(), 
-      tier: Type.Optional(Type.Union([Type.Literal("working"), Type.Literal("episodic"), Type.Literal("semantic"), Type.Literal("procedural")]))
+      tier: Type.Optional(Type.Union([Type.Literal("working"), Type.Literal("episodic"), Type.Literal("semantic"), Type.Literal("procedural")])),
+      confidence: Type.Optional(Type.Number())
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      addMemory(params.content, params.tier || "episodic");
-      return { content: [{ type: "text", text: "Saved (" + sessionMemory.length + ")" }], details: {} };
+      addMemory(params.content, params.tier || "episodic", params.sourceTool, params.confidence || 0.8);
+      await saveMemory(ctx.cwd, sessionMemory);
+      return { content: [{ type: "text", text: `Saved with confidence ${Math.round((params.confidence || 0.8) * 100)}%` }], details: { count: sessionMemory.length } };
     },
   });
 
@@ -294,23 +344,30 @@ export default function (pi: ExtensionAPI) {
     description: "Recall memories",
     parameters: Type.Object({ query: Type.String() }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
-      const results = sessionMemory.filter(m => !m.superseded && m.content.toLowerCase().includes(params.query.toLowerCase())).slice(0, 5);
+      let results = sessionMemory.filter(m => !m.superseded && m.content.toLowerCase().includes(params.query.toLowerCase()));
+      // Sort by confidence
+      results.sort((a, b) => b.confidence - a.confidence);
+      results = results.slice(0, 5);
       if (results.length === 0) return { content: [{ type: "text", text: "No: " + params.query }], details: {} };
-      return { content: [{ type: "text", text: "## Memory\n\n" + results.map(m => "- [" + m.tier + "] " + m.content.slice(0, 60)).join("\n") }], details: {} };
+      return { content: [{ type: "text", text: "## Memory (sorted by confidence)\n\n" + results.map(m => `- [${m.tier}] conf:${Math.round(m.confidence*100)}% ` + m.content.slice(0, 50)).join("\n") }], details: {} };
     },
   });
 
   pi.registerTool({
     name: "memory_consolidate",
     label: "Memory Consolidate",
-    description: "Run memory consolidation",
+    description: "Apply decay and show memory stats",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
+      // Apply decay
+      sessionMemory = applyDecay(sessionMemory);
+      await saveMemory(ctx.cwd, sessionMemory);
       const byTier = {};
       MEMORY_TIERS.forEach(t => byTier[t] = 0);
-      sessionMemory.forEach(m => byTier[m.tier]++);
+      sessionMemory.forEach(m => { if (!m.superseded) byTier[m.tier]++; });
       const superseded = sessionMemory.filter(m => m.superseded).length;
-      return { content: [{ type: "text", text: "## Memory\n\nActive: " + (sessionMemory.length - superseded) + "\nSuperseded: " + superseded + "\n\n" + MEMORY_TIERS.map(t => "- " + t + ": " + byTier[t]).join("\n") }], details: {} };
+      const avgConf = sessionMemory.filter(m => !m.superseded).reduce((a, m) => a + m.confidence, 0) / (sessionMemory.length - superseded || 1);
+      return { content: [{ type: "text", text: `## Memory\n\nActive: ${sessionMemory.length - superseded}\nSuperseded: ${superseded}\nAvg Confidence: ${Math.round(avgConf*100)}%\n\n${MEMORY_TIERS.map(t => "- " + t + ": " + byTier[t]).join("\n")}` }], details: { avgConfidence: avgConf } };
     },
   });
 
@@ -745,6 +802,8 @@ export default function (pi: ExtensionAPI) {
   // ---- HOOK: session_shutdown ----
   pi.on("session_shutdown", async (event, ctx) => {
     addMemory("Session ended at " + new Date().toISOString(), "episodic", "shutdown");
+    // Save memory to disk
+    await saveMemory(ctx.cwd, sessionMemory);
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
