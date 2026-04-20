@@ -219,8 +219,8 @@ Scale beyond simple keyword search. Add BM25, vector search, and graph traversal
 - **RRF Formula**: `score = Σ(1/(k + rank_i))` where k=60
 
 ### Tasks
-- [ ] Add BM25 implementation (or use existing library)
-- [ ] Integrate vector embeddings (consider API calls)
+- [ ] Implement lightweight BM25 in pure JS (no extra deps for Termux)
+- [ ] Add scale-based tier: simple search <50 pages, BM25 50-200
 - [ ] Create `index.md` generation and maintenance
 - [ ] Implement RRF fusion algorithm
 - [ ] Update `wiki_query` to use hybrid search
@@ -228,9 +228,70 @@ Scale beyond simple keyword search. Add BM25, vector search, and graph traversal
 - [ ] Performance optimization for large wikis
 
 ### Pi.dev Context Needed
-- External APIs: Web search integration if needed
+- External APIs: Web search integration if needed (optional)
 - Async operations: `async execute()` with progress updates
 - Large data handling: Streaming for big wiki indexes
+
+---
+
+## Phase 4 Design: Termux Android Compatibility
+
+### Termux Constraints
+- Single process, limited memory (~256MB typical)
+- No heavy services (Elasticsearch, vector DBs)
+- Works offline preferred
+- No Docker available
+
+### Scale-Based Approach
+
+| Wiki Pages | Method | Memory |
+|----------|--------|--------|
+| < 50 | Simple keyword + index.md | <1MB |
+| 50-200 | Lightweight BM25 | ~5MB |
+| 200+ | External or skip BM25 |
+
+### Implementation Options
+
+**Option A: Simple (default for Termux)**
+- Basic keyword search (already implemented)
+- index.md for navigation
+- No extra dependencies
+- Works offline, fast
+
+**Option B: Lightweight BM25**
+- Custom JS implementation (no npm package)
+- ~100 lines of code
+- k1=1.5, b=0.75 standard
+- Works offline
+
+```typescript
+// Simple BM25 in ~50 lines
+function bm25(docTokens, avgDocLen, k1=1.5, b=0.75) {
+  const docLen = docTokens.length;
+  const tf = docTokens.reduce((acc, t) => acc + (t.term === token ? 1 : 0), 0);
+  return (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * docLen / avgDocLen));
+}
+```
+
+**Option C: Wink BM25** (if resources available)
+- npm install wink-bm25-text-search
+- ~2MB extra
+- Better ranking
+
+### Decision
+For Termux: Start with Option A (simple), upgrade to B as wiki grows.
+
+### RRF Formula
+```typescript
+function rrf(scores, k=60) {
+  return scores.map((s, i) => 1 / (k + (i + 1))).reduce((a, b) => a + b, 0);
+}
+```
+
+### Priority
+1. index.md auto-generation (Phase 4)
+2. Simple BM25 (if needed)
+3. RRF fusion for combining results
 
 ---
 
