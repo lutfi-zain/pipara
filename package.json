@@ -1,0 +1,16 @@
+{
+  "name": "pipara",
+  "version": "1.0.0",
+  "description": "PARA + LLM Wiki extension for pi.dev coding agent",
+  "main": "index.ts",
+  "keywords": ["pi", "para", "knowledge-management", "wikil", "ai"],
+  "author": "lutfi-zain",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@mariozechner/pi-coding-agent": "^1.0.0",
+    "@sinclair/typebox": "^0.32.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
