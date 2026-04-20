@@ -279,7 +279,133 @@ function bm25(docTokens, avgDocLen, k1=1.5, b=0.75) {
 - Better ranking
 
 ### Decision
-For Termux: Start with Option A (simple), upgrade to B as wiki grows.
+**SELECTED: Option B** - Lightweight BM25 in pure JS
+
+- ✅ Works for ALL languages (English, Indonesian, etc.)
+- ✅ No npm dependencies
+- ✅ ~100 lines of code
+- ✅ Fast on Android
+- ✅ BM25 ranking without stemming
+
+---
+
+## Option B: Implementation Design
+
+### BM25 Formula (Okapi)
+```
+score(D, Q) = Σ IDF(qi) * (f(qi, D) * (k1 + 1)) / (f(qi, D) + k1 * (1 - b + b * |D| / avgdl))
+
+where:
+- D = Document
+- Q = Query
+- f(qi, D) = term frequency of qi in D
+- |D| = document length
+- avgdl = average document length
+- k1 = 1.5 (term frequency saturation)
+- b = 0.75 (document length normalization)
+- IDF(qi) = log((N - n(qi) + 0.5) / (n(qi) + 0.5))
+- N = total documents
+- n(qi) = documents containing qi
+```
+
+### Implementation (Pure JS ~80 lines)
+```typescript
+// BM25 config
+const BM25_K1 = 1.5;
+const BM25_B = 0.75;
+
+// Tokenize (simple split, no stemming)
+function tokenize(text) {
+  return text.toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter(t => t.length > 1);
+}
+
+// Calculate IDF for all terms
+function calcIDF(docCount, termDocCounts) {
+  const idf: Record<string, number> = {};
+  for (const [term, count] of Object.entries(termDocCounts)) {
+    idf[term] = Math.log((docCount - count + 0.5) / (count + 0.5) + 1);
+  }
+  return idf;
+}
+
+// Score single document
+function scoreDoc(tokens, query, idf, avgLen, k1 = 1.5, b = 0.75) {
+  const docLen = tokens.length;
+  const tf: Record<string, number> = {};
+  tokens.forEach(t => tf[t] = (tf[t] || 0) + 1);
+  
+  let score = 0;
+  for (const q of query) {
+    if (!idf[q]) continue;
+    const termFreq = tf[q] || 0;
+    const numerator = termFreq * (k1 + 1);
+    const denominator = termFreq + k1 * (1 - b + b * docLen / avgLen);
+    score += idf[q] * numerator / denominator;
+  }
+  return score;
+}
+
+// Search all documents
+function bm25Search(documents, query, k1 = 1.5, b = 0.75) {
+  const tokens = documents.map(d => tokenize(d.content));
+  const avgLen = tokens.reduce((a, t) => a + t.length, 0) / tokens.length || 1;
+  
+  // Build term doc counts for IDF
+  const termDocCounts: Record<string, number> = {};
+  const allTerms = new Set();
+  tokens.forEach(t => t.forEach(term => allTerms.add(term)));
+  allTerms.forEach(term => {
+    termDocCounts[term] = tokens.filter(t => t.includes(term)).length;
+  });
+  
+  const idf = calcIDF(documents.length, termDocCounts);
+  const queryTokens = tokenize(query);
+  
+  // Score and rank
+  const results = documents.map((doc, i) => ({
+    id: doc.id,
+    score: scoreDoc(tokens[i], queryTokens, idf, avgLen, k1, b)
+  }));
+  
+  return results.sort((a, b) => b.score - a.score);
+}
+```
+
+### Integration with PiPara
+1. Update `wiki_search` to use BM25 when >10 pages
+2. Cache IDF values for performance
+3. Rebuild index on wiki changes
+4. Store in `.para/search-index.json`
+
+### RRFFusion (combining search methods)
+```typescript
+function rrf(results, k = 60) {
+  const combined = new Map();
+  results.forEach((methodResults, method) => {
+    methodResults.forEach((r, rank) => {
+      const key = r.id;
+      const score = 1 / (k + rank + 1);
+      combined.set(key, (combined.get(key) || 0) + score);
+    });
+  });
+  return Array.from(combined.entries())
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, score]) => ({ id, score }));
+}
+```
+
+### Tasks
+- [x] Document Option B design
+- [ ] Implement BM25 in pure JS (~80 lines)
+- [ ] Add tokenize function
+- [ ] Add IDF calculation
+- [ ] Create search index cache
+- [ ] Update wiki_query to use BM25
+- [ ] Add RRF fusion
+- [ ] Test with Indonesian documents
 
 ### RRF Formula
 ```typescript
