@@ -651,36 +651,44 @@ export default function (pi: ExtensionAPI) {
     return { content: [{ type: "text", text: "## PiPara Visualization\n\n📊 Dashboard saved to: `.pipara-dashboard.html`\n\nOpen in your browser to view the interactive dashboard." }], details: { path: dashboardPath } };
   }
 
+  // ---- REGISTER COMMANDS ----
+  // Slash commands for quick access
+  pi.registerCommand("pipara-dashboard", {
+    description: "Show PiPara dashboard stats",
+    handler: async (args, ctx) => {
+      const result = await runDashboard(ctx.cwd);
+      await ctx.ui.notify(result.content[0].text, "info");
+    },
+  });
+
+  pi.registerCommand("pipara-health", {
+    description: "Check system health",
+    handler: async (args, ctx) => {
+      const result = await runHealth(ctx.cwd);
+      await ctx.ui.notify(result.content[0].text, "info");
+    },
+  });
+
+  pi.registerCommand("pipara-viz", {
+    description: "Generate HTML visualization dashboard",
+    handler: async (args, ctx) => {
+      const result = await runViz(ctx.cwd);
+      await ctx.ui.notify(result.content[0].text, "info");
+    },
+  });
+
+  pi.registerCommand("pipara-help", {
+    description: "Show available commands",
+    handler: async (args, ctx) => {
+      const helpText = `## PiPara Commands\n\n| Command | Description |\n|---------|-------------|\n| /pipara-dashboard | Show text stats |\n| /pipara-health | Check system health |\n| /pipara-viz | Generate HTML visualization |\n| /pipara-help | Show this help |`;
+      await ctx.ui.notify(helpText, "info");
+    },
+  });
+
   // ---- HOOK: input ----
+  // Removed - using registerCommand for slash commands instead
   pi.on("input", async (event, ctx) => {
     const text = event.text.trim();
-    console.log("[PiPara] Input received:", text);
-    
-    // Handle slash commands
-    if (text.startsWith("/pipara-")) {
-      console.log("[PiPara] Slash command detected!");
-      const cmd = text.slice(1).toLowerCase(); // Remove leading / and lowercase
-      
-      if (cmd === "pipara-dashboard" || cmd === "pipara-dash") {
-        console.log("[PiPara] Running dashboard...");
-        const result = await runDashboard(ctx.cwd);
-        return { action: "replace", response: result };
-      }
-      
-      if (cmd === "pipara-health" || cmd === "pipara-h") {
-        const result = await runHealth(ctx.cwd);
-        return { action: "replace", response: result };
-      }
-      
-      if (cmd === "pipara-viz" || cmd === "pipara-visualize" || cmd === "pipara-v") {
-        const result = await runViz(ctx.cwd);
-        return { action: "replace", response: result };
-      }
-      
-      if (cmd === "pipara-help") {
-        return { action: "replace", response: { content: [{ type: "text", text: `## PiPara Commands\n\n**Available:**\n\n| Command | Description |\n|---------|-------------|\n| /pipara-dashboard | Show text stats |\n| /pipara-health | Check system health |\n| /pipara-viz | Generate HTML visualization |\n| /pipara-help | Show this help |\n\n**Aliases:**\n- /pipara-dash = /pipara-dashboard\n- /pipara-h = /pipara-health\n- /pipara-v = /pipara-viz` }], details: {} } };
-      }
-    }
     
     // Detect intent to create new project
     if (/i('m| am)?\s*(start|working|building|creating)/.test(text.toLowerCase()) || /new\s*(project|app|website)/.test(text.toLowerCase())) {
