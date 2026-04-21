@@ -650,7 +650,7 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "content_score",
     label: "Content Score",
-    description: "Score wiki quality",
+    description: "Score wiki quality (A=80-100, B=60-79, C=40-59, D=0-39)",
     parameters: Type.Object({ 
       item: Type.String(), 
       category: Type.Union([Type.Literal("projects"), Type.Literal("areas"), Type.Literal("resources"), Type.Literal("archives")])
@@ -660,17 +660,48 @@ export default function (pi: ExtensionAPI) {
       if (!exists) return { content: [{ type: "text", text: "Not found" }], details: {} };
       const wikiDir = join(await getItemDir(ctx.cwd, params.category, params.item), WIKI_DIR);
       if (!existsSync(wikiDir)) return { content: [{ type: "text", text: "No wiki" }], details: {} };
-      let score = 0, pages = 0;
-      for (const file of await readdir(wikiDir)) {
-        if (!file.endsWith(".md")) continue;
+      
+      const files = await readdir(wikiDir).then(f => f.filter(x => x.endsWith(".md")));
+      if (files.length === 0) return { content: [{ type: "text", text: "No wiki pages" }], details: {} };
+      
+      let totalScore = 0;
+      const details = [];
+      
+      for (const file of files) {
         const content = await readFile(join(wikiDir, file), "utf8");
-        if (content.includes("# ")) score += 0.2;
-        if (content.length > 200) score += 0.2;
-        pages++;
+        let score = 0;
+        const checks = {};
+        
+        // 1. Has title (10%)
+        checks.title = content.includes("# ") ? 10 : 0;
+        // 2. Content length > 500 chars (15%)
+        checks.length = content.length > 500 ? 15 : (content.length > 200 ? 8 : 0);
+        // 3. Has ## sections (15%)
+        const sections = (content.match(/^##\s/gm) || []).length;
+        checks.sections = sections >= 3 ? 15 : sections >= 1 ? 10 : 0;
+        // 4. Has lists (10%)
+        checks.lists = (content.includes("- ") || content.includes("* ") || content.includes("1.")) ? 10 : 0;
+        // 5. Has code blocks (15%)
+        checks.code = (content.includes("```") || content.includes("`")) ? 15 : 0;
+        // 6. Has links (10%)
+        checks.links = (content.includes("[") && content.includes("](")) ? 10 : 0;
+        // 7. Has source reference (10%)
+        checks.source = (content.toLowerCase().includes("source") || content.toLowerCase().includes("reference")) ? 10 : 0;
+        // 8. Has entities/mentions (15%)
+        checks.entities = (content.includes("(") && content.includes(")") && content.includes(":")) ? 15 : 0;
+        
+        score = Object.values(checks).reduce((a, b) => a + b, 0);
+        totalScore += score;
+        details.push({ file, score, checks });
       }
-      const avg = pages > 0 ? Math.round(score / pages * 100) : 0;
+      
+      const avg = Math.round(totalScore / files.length);
       const grade = avg >= 80 ? "A" : avg >= 60 ? "B" : avg >= 40 ? "C" : "D";
-      return { content: [{ type: "text", text: "## " + params.item + "\n\nGrade: " + grade + " (" + avg + "%)" }], details: { avgScore: avg } };
+      const gradeColor = grade === "A" ? "🟢" : grade === "B" ? "🟡" : grade === "C" ? "🟠" : "🔴";
+      
+      const breakdown = details.map(d => `  - ${d.file}: ${d.score}% (${Object.entries(d.checks).filter(([k,v]) => v > 0).map(([k,v]) => k).join(", ") || "none"})`).join("\n");
+      
+      return { content: [{ type: "text", text: `## ${params.item} - Grade ${gradeColor} ${grade} (${avg}%)\n\n**Breakdown:**\n${breakdown}\n\n*Criteria: title, length>500, sections, lists, code, links, source, entities*` }], details: { avgScore: avg, grade, files: details } };
     },
   });
 
