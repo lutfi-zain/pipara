@@ -510,6 +510,223 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerTool({
+    name: "graph_visualize",
+    label: "Graph Visualize",
+    description: "Generate interactive graph visualization (Obsidian-style)",
+    parameters: Type.Object({ 
+      limit: Type.Optional(Type.Number())
+    }),
+    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+      const graph = await loadGraph(ctx.cwd);
+      const entities = Object.values(graph.entities);
+      const limit = params.limit || 50;
+      const topEntities = entities.sort((a, b) => b.mentions - a.mentions).slice(0, limit);
+      
+      // Build nodes and links
+      const nodes = topEntities.map((e, i) => ({
+        id: e.name,
+        type: e.type,
+        mentions: e.mentions,
+        x: Math.random() * 800,
+        y: Math.random() * 600
+      }));
+      
+      const links = [];
+      const nodeIds = new Set(nodes.map(n => n.id));
+      topEntities.forEach(e => {
+        e.related.forEach(r => {
+          if (nodeIds.has(r.entity)) {
+            links.push({ source: e.name, target: r.entity, relation: r.relation });
+          }
+        });
+      });
+      
+      const typeColors = {
+        tool: '#4fc3f7',
+        concept: '#81c784',
+        person: '#ffb74d',
+        project: '#f06292',
+        decision: '#ba68c8',
+        file: '#90a4ae'
+      };
+      
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>PiPara Graph</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #1a1a2e; color: #eee; font-family: system-ui; overflow: hidden; }
+    #canvas { position: absolute; top: 0; left: 0; }
+    #info {
+      position: absolute; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 15px; border-radius: 8px;
+      font-size: 12px; max-width: 250px;
+    }
+    #info h3 { color: #4fc3f7; margin-bottom: 10px; }
+    #info .stat { margin: 5px 0; }
+    #legend {
+      position: absolute; bottom: 10px; left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px; border-radius: 8px;
+      font-size: 11px;
+    }
+    #legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; }
+    #controls {
+      position: absolute; top: 10px; right: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 10px; border-radius: 8px;
+    }
+    #controls button {
+      background: #4fc3f7; border: none; padding: 5px 10px;
+      border-radius: 4px; cursor: pointer; color: #000; margin: 2px;
+    }
+    #controls button:hover { background: #81d4fa; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+  <div id="info">
+    <h3>📊 PiPara Graph</h3>
+    <div class="stat">Nodes: <b>${nodes.length}</b></div>
+    <div class="stat">Links: <b>${links.length}</b></div>
+    <div class="stat">Drag to move, scroll to zoom</div>
+  </div>
+  <div id="legend">
+    <div><span class="dot" style="background:#4fc3f7"></span>Tool</div>
+    <div><span class="dot" style="background:#81c784"></span>Concept</div>
+    <div><span class="dot" style="background:#ffb74d"></span>Person</div>
+    <div><span class="dot" style="background:#f06292"></span>Project</div>
+  </div>
+  <div id="controls">
+    <button onclick="resetView()">Reset</button>
+    <button onclick="toggleLabels()">Labels</button>
+  </div>
+  
+  <script>
+    const nodes = ${JSON.stringify(nodes)};
+    const links = ${JSON.stringify(links)};
+    const colors = ${JSON.stringify(typeColors)};
+    
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let width = canvas.width = window.innerWidth;
+    let height = canvas.height = window.innerHeight;
+    
+    let offsetX = 0, offsetY = 0, scale = 1;
+    let dragging = null;
+    let showLabels = true;
+    
+    // Physics simulation
+    for (let i = 0; i < 100; i++) simulate();
+    
+    function simulate() {
+      nodes.forEach(n => {
+        n.vx = n.vx || 0; n.vy = n.vy || 0;
+        n.vx *= 0.9; n.vy *= 0.9;
+        // Center gravity
+        n.vx += (400 - n.x) * 0.001;
+        n.vy += (300 - n.y) * 0.001;
+      });
+      
+      links.forEach(l => {
+        const s = nodes.find(n => n.id === l.source);
+        const t = nodes.find(n => n.id === l.target);
+        if (!s || !t) return;
+        const dx = t.x - s.x, dy = t.y - s.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        const force = (dist - 100) * 0.01;
+        s.vx += dx/dist * force;
+        s.vy += dy/dist * force;
+        t.vx -= dx/dist * force;
+        t.vy -= dy/dist * force;
+      });
+      
+      nodes.forEach(n => {
+        n.x += n.vx; n.y += n.vy;
+        n.x = Math.max(20, Math.min(780, n.x));
+        n.y = Math.max(20, Math.min(580, n.y));
+      });
+    }
+    
+    function draw() {
+      ctx.fillStyle = '#1a1a2e';
+      ctx.fillRect(0, 0, width, height);
+      ctx.save();
+      ctx.translate(offsetX, offsetY);
+      ctx.scale(scale, scale);
+      
+      // Links
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 1;
+      links.forEach(l => {
+        const s = nodes.find(n => n.id === l.source);
+        const t = nodes.find(n => n.id === l.target);
+        if (!s || !t) return;
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(t.x, t.y);
+        ctx.stroke();
+      });
+      
+      // Nodes
+      nodes.forEach(n => {
+        const r = 5 + Math.min(n.mentions * 2, 15);
+        ctx.fillStyle = colors[n.type] || '#90a4ae';
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        
+        if (showLabels) {
+          ctx.fillStyle = '#fff';
+          ctx.font = '10px system-ui';
+          ctx.fillText(n.name, n.x + r + 3, n.y + 3);
+        }
+      });
+      
+      ctx.restore();
+      requestAnimationFrame(draw);
+    }
+    
+    canvas.onmousedown = e => {
+      const mx = (e.clientX - offsetX) / scale;
+      const my = (e.clientY - offsetY) / scale;
+      dragging = nodes.find(n => {
+        const dx = n.x - mx, dy = n.y - my;
+        return Math.sqrt(dx*dx + dy*dy) < 20;
+      });
+    };
+    
+    canvas.onmousemove = e => {
+      if (dragging) {
+        dragging.x = (e.clientX - offsetX) / scale;
+        dragging.y = (e.clientY - offsetY) / scale;
+      }
+    };
+    
+    canvas.onmouseup = () => dragging = null;
+    canvas.onwheel = e => {
+      e.preventDefault();
+      scale *= e.deltaY > 0 ? 0.9 : 1.1;
+    };
+    
+    window.resetView = () => { offsetX = 0; offsetY = 0; scale = 1; };
+    window.toggleLabels = () => showLabels = !showLabels;
+    
+    draw();
+  </script>
+</body>
+</html>`;
+      
+      const vizPath = join(ctx.cwd, ".pipara-graph.html");
+      await writeFile(vizPath, html);
+      return { content: [{ type: "text", text: `## 📊 Graph Visualization\n\nGenerated: .pipara-graph.html\n\n**${nodes.length} nodes, ${links.length} links**\n\nOpen in browser to view interactive graph.` }], details: { nodes: nodes.length, links: links.length } };
+    },
+  });
+
+  pi.registerTool({
     name: "memory_save",
     label: "Memory Save",
     description: "Save to memory with confidence",
