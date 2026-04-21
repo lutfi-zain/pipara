@@ -638,10 +638,39 @@ Self-healing wiki that maintains itself. Detect issues, propose fixes, and ensur
 - [x] Create health dashboard and notifications
 
 ### Phase 6 Completion: ✅ DONE
-- content_score: grades wiki quality A-F
-- detect_contradictions: finds graph conflicts
-- self_heal: finds orphan/small pages
-- audit_trail: shows PARA history
+- content_score: grades wiki quality A-F ✅ (improved to 96%)
+- detect_contradictions: finds graph conflicts ✅
+- self_heal: finds orphan/small pages ✅
+- audit_trail: shows PARA history ✅
+- graph_visualize: Obsidian-style interactive graph ✅
+
+## Graph Improvement: Co-occurrence Links
+
+### Problem
+- 66 entities but 0 links between them
+- Relationships only added when explicitly specified
+
+### Solution: Auto-link co-occurring entities
+1. Extract all entities from each wiki page
+2. Link any entities that appear together in the same page
+3. This is how Obsidian builds its local graph
+
+### Implementation:
+```typescript
+// In wikiIngest - extract entities and link all co-occurrences
+const pageEntities = extractEntities(content);
+for (let i = 0; i < pageEntities.length; i++) {
+  for (let j = i + 1; j < pageEntities.length; j++) {
+    await addEntity(cwd, pageEntities[i].name, pageEntities[i].type, 
+                         pageEntities[j].name, "related_to");
+  }
+}
+```
+
+### Tasks:
+- [ ] Add co-occurrence linking to wikiIngest
+- [ ] Rebuild graph from existing pages
+- [ ] Test visualization with links
 
 ### Pi.dev Context Needed
 - UI notifications: `ctx.ui.notify()` for alerts

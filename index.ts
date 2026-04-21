@@ -522,7 +522,7 @@ export default function (pi: ExtensionAPI) {
       const limit = params.limit || 50;
       const topEntities = entities.sort((a, b) => b.mentions - a.mentions).slice(0, limit);
       
-      // Build nodes and links
+      // Build nodes
       const nodes = topEntities.map((e, i) => ({
         id: e.name,
         type: e.type,
@@ -531,12 +531,54 @@ export default function (pi: ExtensionAPI) {
         y: Math.random() * 600
       }));
       
+      // Build links from stored relationships AND co-occurrence
       const links = [];
       const nodeIds = new Set(nodes.map(n => n.id));
+      
+      // 1. Use stored relationships
       topEntities.forEach(e => {
         e.related.forEach(r => {
           if (nodeIds.has(r.entity)) {
             links.push({ source: e.name, target: r.entity, relation: r.relation });
+          }
+        });
+      });
+      
+      // 2. Add co-occurrence links from wiki pages
+      const cooccurrence = new Map(); // Map of entity -> Set of related entities
+      for (const cat of CATEGORIES) {
+        const items = await listItems(ctx.cwd, cat);
+        for (const item of items) {
+          const wikiDir = join(await getItemDir(ctx.cwd, cat, item), WIKI_DIR);
+          if (!existsSync(wikiDir)) continue;
+          for (const file of await readdir(wikiDir)) {
+            if (!file.endsWith(".md")) continue;
+            const content = await readFile(join(wikiDir, file), "utf8");
+            const pageEntities = extractEntities(content).map(e => e.name);
+            // Link all entities in same page
+            for (let i = 0; i < pageEntities.length; i++) {
+              if (!cooccurrence.has(pageEntities[i])) cooccurrence.set(pageEntities[i], new Set());
+              for (let j = i + 1; j < pageEntities.length; j++) {
+                cooccurrence.get(pageEntities[i]).add(pageEntities[j]);
+              }
+            }
+          }
+        }
+      }
+      
+      // Add co-occurrence links to visualization
+      cooccurrence.forEach((relatedSet, entity) => {
+        if (!nodeIds.has(entity)) return;
+        relatedSet.forEach(related => {
+          if (nodeIds.has(related)) {
+            // Avoid duplicates
+            const exists = links.some(l => 
+              (l.source === entity && l.target === related) ||
+              (l.source === related && l.target === entity)
+            );
+            if (!exists) {
+              links.push({ source: entity, target: related, relation: "co-occurs" });
+            }
           }
         });
       });
