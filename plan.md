@@ -579,14 +579,16 @@ Make the system run with minimal manual intervention. Auto-ingest sources, load 
 - [x] Update system prompt injection
 - [x] Add activity logging (`.para/activity.md`)
 - [x] Implement session crystallization
-- [ ] Scheduled maintenance (weekly run para_maintenance)
+- [x] Fix activity logging path
+- [ ] ~~Scheduled maintenance~~ (manual run via para_maintenance)
 
-### Phase 5 Completion: ✅ MOSTLY DONE
-- tool_result hook: captures errors, extracts entities
-- auto_suggest: suggests next actions
-- before_agent_start: injects context into prompt
-- session_compact: crystallizes memory
-- activity.md: logs all operations
+### Phase 5 Completion: ✅ DONE
+- tool_result hook: captures errors, extracts entities ✅
+- auto_suggest: suggests next actions ✅
+- before_agent_start: injects context into prompt ✅
+- session_compact: crystallizes memory ✅
+- activity.md: logs all operations ✅ (FIXED)
+- Memory persistence: saves to disk ✅
 
 ### Pi.dev Context Needed
 - Event system: `pi.on()` hooks for all events
