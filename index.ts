@@ -233,6 +233,15 @@ function extractEntities(content) {
   for (const m of content.matchAll(/(created|added|updated|deleted|implemented|fixed)\s+([A-Z]\w+)/gi)) {
     if (!entities.find(e => e.name === m[2])) entities.push({ name: m[2], type: "decision" });
   }
+  
+  // IMPORTANT: Extract key concepts - capitalized words (like React, TypeScript, etc)
+  const stopWords = new Set(['The', 'This', 'That', 'When', 'What', 'Such', 'Each', 'With', 'From', 'Have', 'Here', 'Then', 'Also', 'More', 'Most', 'Some', 'Only', 'Other', 'After', 'Before', 'While', 'Will', 'Would', 'Could', 'Should', 'Must', 'May', 'Can', 'Does', 'Did', 'Just']);
+  for (const m of content.matchAll(/\b([A-Z][a-z]+(?:[A-Z][a-z]+|script)?)\b/g)) {
+    const word = m[1];
+    if (word.length < 4 || stopWords.has(word)) continue;
+    if (!entities.find(e => e.name === word)) entities.push({ name: word, type: "concept" });
+  }
+  
   return entities;
 }
 
