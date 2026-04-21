@@ -969,10 +969,20 @@ export default function (pi: ExtensionAPI) {
     
     addMemory("Session compacted at " + new Date().toISOString() + " | " + assistantMsgs.length + " turns", "episodic", "compact");
     
-    // Log to activity
-    const logPath = join(ctx.cwd, PARA_DIR, "activity.md");
-    const logEntry = `- ${new Date().toISOString()}: Session compacted (${assistantMsgs.length} turns)`;
-    await writeFile(logPath, logEntry, { flag: "a" }).catch(() => {});
+    // Log to activity in PARA directory
+    const activityPath = join(ctx.cwd, PARA_DIR, "activity.md");
+    const logEntry = `\n- ${new Date().toISOString()}: Session compacted (${assistantMsgs.length} turns)`;
+    
+    try {
+      const exists = existsSync(activityPath);
+      if (exists) {
+        await writeFile(activityPath, logEntry, { flag: "a" });
+      } else {
+        await writeFile(activityPath, `# PiPara Activity Log\n${logEntry}`);
+      }
+    } catch (e) {
+      // Silent fail if can't write
+    }
   });
 
   // ---- HOOK: message_end ----
@@ -992,6 +1002,20 @@ export default function (pi: ExtensionAPI) {
     addMemory("Session ended at " + new Date().toISOString(), "episodic", "shutdown");
     // Save memory to disk
     await saveMemory(ctx.cwd, sessionMemory);
+    
+    // Log to activity
+    const activityPath = join(ctx.cwd, PARA_DIR, "activity.md");
+    const logEntry = `\n- ${new Date().toISOString()}: Session ended (memory: ${sessionMemory.length})`;
+    try {
+      const exists = existsSync(activityPath);
+      if (exists) {
+        await writeFile(activityPath, logEntry, { flag: "a" });
+      } else {
+        await writeFile(activityPath, `# PiPara Activity Log\n${logEntry}`);
+      }
+    } catch (e) {
+      // Silent fail
+    }
   });
 
   pi.on("before_agent_start", async (event, ctx) => {
