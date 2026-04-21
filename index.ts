@@ -554,9 +554,16 @@ export default function (pi: ExtensionAPI) {
       });
       
       // 2. Add co-occurrence links from wiki pages
+      // Use HOME directory if wiki not found in ctx.cwd
+      let searchCwd = ctx.cwd;
+      const testWikiDir = join(searchCwd, PARA_DIR, 'projects');
+      if (!existsSync(testWikiDir)) {
+        searchCwd = process.env.HOME || '/data/data/com.termux/files/home';
+      }
+      
       const cooccurrence = new Map(); // Map of entity -> Set of related entities
       for (const cat of CATEGORIES) {
-        const items = await listItems(ctx.cwd, cat);
+        const items = await listItems(searchCwd, cat);
         for (const item of items) {
           const wikiDir = join(await getItemDir(ctx.cwd, cat, item), WIKI_DIR);
           if (!existsSync(wikiDir)) continue;
